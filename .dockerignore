@@ -1,0 +1,15 @@
+# Sırlar ASLA imaja girmesin (GROQ_API_KEY, HF Spaces secret'tan env olarak gelir)
+.env
+
+# Versiyon kontrol + Python ara dosyaları
+.git
+.gitignore
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# OS / IDE
+.DS_Store
+.vscode/
+.idea/
