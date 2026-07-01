@@ -31,6 +31,7 @@ Kurallar:
 - Bilmediğin ya da güncel olabilecek bilgileri KAFADAN uydurma; önce web_search ile ara.
 - Arama özetleri yetersiz kalırsa, en umut vadeden URL'yi read_url ile derinlemesine oku.
 - Sayısal işlemleri kafadan yapma, calculator aracını kullan.
+- Bir aracı çağırırken GEREKLİ TÜM parametreleri doldur (ör. web_search için mutlaka bir "query" ver); asla boş argümanla araç çağırma.
 - Yeterince bilgi topladığında DUR ve nihai cevabı ver.
 - Cevabı kullanıcının dilinde, net ve öz yaz; sonunda kullandığın kaynakların
   URL'lerini "Kaynaklar:" başlığı altında listele.
@@ -48,6 +49,35 @@ def _client() -> Groq:
             "key al ve .env'e ekle."
         )
     return Groq(api_key=settings.groq_api_key)
+
+
+def _chat(client, messages, with_tools: bool):
+    """
+    Groq'a sohbet çağrısı yap. Model bazen BOZUK bir araç çağrısı üretir (argümanı
+    eksik) ve Groq bunu sunucu tarafında 'tool_use_failed' / 'did not match schema'
+    hatasıyla reddeder. Üretim rastgele olduğundan, bu durumda birkaç kez tekrar
+    deneriz; her denemede sıcaklığı biraz artırıp farklı (ve genelde geçerli) bir
+    üretim zorlarız. Bu, Llama + function-calling'in bilinen kırılganlığına karşı
+    basit ama etkili bir dayanıklılık katmanıdır.
+    """
+    kwargs = {"model": settings.model, "messages": messages, "temperature": 0.2}
+    if with_tools:
+        kwargs["tools"] = TOOL_SCHEMAS
+        kwargs["tool_choice"] = "auto"
+
+    attempts = 4
+    last_error = None
+    for i in range(attempts):
+        try:
+            return client.chat.completions.create(**kwargs)
+        except groq_sdk.APIError as e:
+            last_error = e
+            retryable = "tool_use_failed" in str(e) or "did not match schema" in str(e)
+            if retryable and i < attempts - 1:
+                kwargs["temperature"] = min(0.8, kwargs["temperature"] + 0.2)
+                continue
+            raise
+    raise last_error
 
 
 def _assistant_msg(msg) -> dict:
@@ -92,13 +122,7 @@ def run_agent(question: str, on_event=None) -> dict:
 
     for _ in range(settings.max_steps):
         try:
-            response = client.chat.completions.create(
-                model=settings.model,
-                messages=messages,
-                tools=TOOL_SCHEMAS,
-                tool_choice="auto",
-                temperature=0.2,
-            )
+            response = _chat(client, messages, with_tools=True)
         except groq_sdk.APIError as e:
             raise AgentError(f"LLM çağrısı başarısız: {e}")
 
@@ -146,9 +170,7 @@ def run_agent(question: str, on_event=None) -> dict:
         "content": "Adım limitine ulaşıldı. Topladığın bilgiyle en iyi nihai cevabı şimdi ver.",
     })
     try:
-        final = client.chat.completions.create(
-            model=settings.model, messages=messages, temperature=0.2
-        )
+        final = _chat(client, messages, with_tools=False)
         answer = final.choices[0].message.content or "Cevap üretilemedi."
     except groq_sdk.APIError as e:
         raise AgentError(f"LLM çağrısı başarısız: {e}")
