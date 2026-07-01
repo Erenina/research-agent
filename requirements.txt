@@ -1,0 +1,14 @@
+# --- LLM (function-calling / tool use) ---
+groq>=0.11                   # Groq (ücretsiz, Llama 3.3 70B araç kullanımını destekler)
+
+# --- Araçlar (tools) ---
+ddgs>=6.0                    # DuckDuckGo araması (API anahtarı gerektirmez)
+beautifulsoup4>=4.12         # web sayfası metnini ayıklama
+requests>=2.31               # sayfa indirme
+
+# --- Ayarlar ---
+pydantic-settings>=2.4       # .env'den yapılandırma
+
+# --- Web arayüzü (deploy) ---
+fastapi>=0.115
+uvicorn[standard]>=0.30
