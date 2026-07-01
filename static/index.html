@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Research Agent — Otonom Araştırma</title>
+  <style>
+    /* ---- Tasarım token'ları (elle yazılmış CSS, CDN yok) ---- */
+    :root {
+      --bg: #f7f8fa;
+      --card: #ffffff;
+      --border: #e5e7eb;
+      --fg: #0f172a;
+      --muted: #64748b;
+      --accent: #4f46e5;
+      --accent-soft: #eef2ff;
+      --ok: #059669;
+      --err: #dc2626;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      --sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; background: var(--bg); color: var(--fg);
+      font-family: var(--sans); line-height: 1.5;
+    }
+    header {
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      padding: 14px 20px; background: var(--card); border-bottom: 1px solid var(--border);
+      position: sticky; top: 0; z-index: 10;
+    }
+    .brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+    .logo {
+      display: grid; place-items: center; width: 40px; height: 40px; flex: none;
+      background: var(--accent); border-radius: 11px; font-size: 20px;
+    }
+    header h1 { font-size: 16px; margin: 0; font-weight: 700; }
+    header p { font-size: 12.5px; margin: 0; color: var(--muted); }
+    .status {
+      font-size: 12px; color: var(--muted); background: var(--bg);
+      padding: 5px 10px; border-radius: 999px; white-space: nowrap;
+    }
+    .status .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+      background: #cbd5e1; margin-right: 6px; vertical-align: middle; }
+    .status.online .dot { background: var(--ok); }
+    .status.offline .dot { background: var(--err); }
+
+    main { max-width: 760px; margin: 0 auto; padding: 22px 16px 80px; }
+
+    /* ---- Soru kutusu ---- */
+    .composer { display: flex; gap: 8px; }
+    .composer input {
+      flex: 1; padding: 13px 15px; font-size: 15px; font-family: inherit;
+      border: 1px solid var(--border); border-radius: 11px; background: var(--card);
+      outline: none;
+    }
+    .composer input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+    .composer button {
+      padding: 0 20px; font-size: 15px; font-weight: 600; font-family: inherit;
+      color: #fff; background: var(--accent); border: none; border-radius: 11px; cursor: pointer;
+    }
+    .composer button:disabled { opacity: .5; cursor: not-allowed; }
+
+    .examples { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+    .chip {
+      font-size: 12.5px; font-family: inherit; color: var(--muted); cursor: pointer;
+      background: var(--card); border: 1px solid var(--border); border-radius: 999px; padding: 6px 12px;
+    }
+    .chip:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* ---- İz (trace) ---- */
+    .trace { margin-top: 22px; display: flex; flex-direction: column; gap: 10px; }
+    .step { display: flex; gap: 10px; align-items: flex-start; animation: reveal .2s ease-out both; }
+    .step .ic { flex: none; width: 26px; height: 26px; display: grid; place-items: center;
+      border-radius: 8px; background: var(--card); border: 1px solid var(--border); font-size: 14px; }
+    .step .body { flex: 1; min-width: 0; padding-top: 2px; }
+    .step.think .body { color: var(--muted); font-style: italic; }
+    .step.tool .body code {
+      font-family: var(--mono); font-size: 13px; background: var(--accent-soft);
+      color: var(--accent); padding: 4px 8px; border-radius: 7px; word-break: break-all;
+    }
+    .step.result details { font-size: 13px; }
+    .step.result summary { color: var(--muted); cursor: pointer; user-select: none; }
+    .step.result pre {
+      margin: 8px 0 0; padding: 10px 12px; background: var(--card); border: 1px solid var(--border);
+      border-radius: 9px; font-family: var(--mono); font-size: 12px; white-space: pre-wrap;
+      word-break: break-word; max-height: 220px; overflow: auto; color: #334155;
+    }
+    .step.error .body { color: var(--err); }
+
+    /* ---- Nihai cevap ---- */
+    .answer {
+      border: 1px solid var(--border); border-left: 4px solid var(--ok);
+      background: var(--card); border-radius: 12px; padding: 16px 18px; animation: reveal .25s ease-out both;
+    }
+    .answer .head { display: flex; align-items: center; gap: 8px; font-weight: 700; color: var(--ok); margin-bottom: 8px; }
+    .answer .content { font-size: 15px; word-wrap: break-word; }
+    .answer .content a { color: var(--accent); word-break: break-all; }
+
+    .thinking { display: none; align-items: center; gap: 9px; color: var(--muted); font-size: 14px; margin-top: 14px; }
+    .thinking.on { display: flex; }
+    .thinking .spin { width: 15px; height: 15px; border: 2px solid var(--border); border-top-color: var(--accent);
+      border-radius: 50%; animation: spin .8s linear infinite; }
+
+    .hint { color: var(--muted); font-size: 13px; text-align: center; margin-top: 40px; }
+
+    @keyframes reveal { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) { * { animation: none !important; } }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <span class="logo" aria-hidden="true">🔎</span>
+      <div>
+        <h1>Research Agent</h1>
+        <p>Bir soru sor — agent web'de kendi araştırıp kaynaklı cevap versin</p>
+      </div>
+    </div>
+    <span id="status" class="status"><span class="dot"></span>bağlanıyor…</span>
+  </header>
+
+  <main>
+    <form id="form" class="composer">
+      <input id="q" type="text" autocomplete="off"
+             placeholder="Örn: 2024 Nobel Barış Ödülü'nü kim kazandı?" />
+      <button id="send" type="submit">Araştır</button>
+    </form>
+
+    <div class="examples" id="examples">
+      <button type="button" class="chip">2024 Nobel Barış Ödülü'nü kim kazandı?</button>
+      <button type="button" class="chip">Eyfel Kulesi kaç metre? 3 katı kaç eder?</button>
+      <button type="button" class="chip">Python'un en son kararlı sürümü nedir?</button>
+    </div>
+
+    <section id="trace" class="trace" aria-live="polite"></section>
+    <div id="thinking" class="thinking"><span class="spin"></span> agent araştırıyor…</div>
+    <p class="hint" id="hint">Adımlar (💭 düşün · 🔧 araç · ↳ sonuç · ✅ cevap) burada canlı görünecek.</p>
+  </main>
+
+  <script>
+    const $ = (s) => document.querySelector(s);
+    const trace = $('#trace');
+    let es = null;
+
+    // --- HTML kaçışı + URL'leri tıklanabilir yap ---
+    function escapeHtml(s) {
+      return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+    function linkify(s) {
+      return escapeHtml(s).replace(/(https?:\/\/[^\s<]+)/g,
+        '<a href="$1" target="_blank" rel="noopener">$1</a>');
+    }
+
+    function addStep(cls, innerHtml) {
+      const div = document.createElement('div');
+      div.className = 'step ' + cls;
+      div.innerHTML = innerHtml;
+      trace.appendChild(div);
+      $('#thinking').scrollIntoView({ behavior: 'smooth', block: 'end' });
+      return div;
+    }
+
+    function renderEvent(ev) {
+      if (ev.type === 'think') {
+        addStep('think', `<span class="ic">💭</span><div class="body">${escapeHtml(ev.text)}</div>`);
+      } else if (ev.type === 'tool_call') {
+        const args = Object.entries(ev.args || {}).map(([k, v]) => `${k}=${JSON.stringify(v)}`).join(', ');
+        addStep('tool', `<span class="ic">🔧</span><div class="body"><code>${escapeHtml(ev.name + '(' + args + ')')}</code></div>`);
+      } else if (ev.type === 'tool_result') {
+        addStep('result', `<span class="ic">↳</span><details class="body"><summary>sonuç (${escapeHtml(ev.name)})</summary><pre>${escapeHtml(ev.result)}</pre></details>`);
+      } else if (ev.type === 'final') {
+        const div = document.createElement('div');
+        div.className = 'answer';
+        div.innerHTML = `<div class="head">✅ Cevap</div><div class="content">${linkify(ev.answer).replace(/\n/g, '<br>')}</div>`;
+        trace.appendChild(div);
+        div.scrollIntoView({ behavior: 'smooth', block: 'end' });
+      } else if (ev.type === 'error') {
+        addStep('error', `<span class="ic">⚠️</span><div class="body">${escapeHtml(ev.message)}</div>`);
+      }
+    }
+
+    function setRunning(on) {
+      $('#send').disabled = on;
+      $('#thinking').classList.toggle('on', on);
+    }
+
+    function ask(q) {
+      if (!q || es) return;
+      trace.innerHTML = '';
+      $('#examples').style.display = 'none';
+      $('#hint').style.display = 'none';
+      setRunning(true);
+
+      es = new EventSource('/ask?q=' + encodeURIComponent(q));
+      es.onmessage = (e) => {
+        const ev = JSON.parse(e.data);
+        if (ev.type === 'done') { finish(); return; }
+        renderEvent(ev);
+        if (ev.type === 'final' || ev.type === 'error') finish();
+      };
+      es.onerror = () => finish();  // bağlantı koptu / sunucu bitirdi
+    }
+
+    function finish() {
+      if (es) { es.close(); es = null; }
+      setRunning(false);
+    }
+
+    // --- Olay bağlama ---
+    $('#form').addEventListener('submit', (e) => { e.preventDefault(); ask($('#q').value.trim()); });
+    document.querySelectorAll('.chip').forEach(c =>
+      c.addEventListener('click', () => { $('#q').value = c.textContent; ask(c.textContent); }));
+
+    // --- Sağlık göstergesi ---
+    async function health() {
+      const el = $('#status');
+      try {
+        const r = await fetch('/health');
+        if (!r.ok) throw 0;
+        el.className = 'status online'; el.innerHTML = '<span class="dot"></span>çevrimiçi';
+      } catch {
+        el.className = 'status offline'; el.innerHTML = '<span class="dot"></span>sunucu kapalı';
+      }
+    }
+    health();
+  </script>
+</body>
+</html>
